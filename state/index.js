@@ -12,9 +12,6 @@ module.exports = generators.Base.extend({
     this.option('module', {desc: 'Module   e.g. consumer', type: 'String'});
     this.option('url', {desc: 'URL  e.g. /support.html', type: 'String'});
     this.option('module', {desc: 'Module name  e.g. consumer', type: 'String'});
-    this.option('template', {desc:'Template name', type: 'String'});
-    this.option('template-url', {desc:'Template URL', type: 'String'});
-    this.option('template-provider', {desc:'Template provider', type: 'String'});
     this.option('location', {desc:'Location (namespace) of the directive (_.hf)', type: 'Boolean'});
     if (this.name && this.name.toLowerCase() !== 'ctrl' && this.name.substr(-'ctrl'.length).toLowerCase() === 'ctrl') {
       this.name = this.name.slice(0, -4);
@@ -37,7 +34,7 @@ module.exports = generators.Base.extend({
         name: 'module',
         message: 'What is the module name (e.g. consumer)',
         when: function () { return _.isUndefined(_this.options.module) },
-        validate: function (answer) { return _this._validateStateName(answer) || 'Must contain only letters, numbers, and _' }
+        validate: function (answer) { return _this._validateStateName(answer) || 'Must contain only letters and numbers' }
       },
       {
         type: 'confirm',
@@ -103,7 +100,7 @@ module.exports = generators.Base.extend({
         message: 'What is the name of the controller (e.g. support)',
         default: function (answers) {
           var name = _this.options.name || answers.name;
-          return name + 'Controller'
+          return _.capitalize(name);
         },
         validation: function (answer) { return _this._validateStateName(answer) }
       }
@@ -111,10 +108,12 @@ module.exports = generators.Base.extend({
       this.options.abstract = this.options.abstract || answers.abstract;
       this.options.name     = this.name || answers.name;
       this.options.module   = this.options.module || answers.module;
-      this.options.templateUrl = this.options.templateUrl || answers.templateUrl;
-      this.options.template = this.options.template || answers.template;
+      this.options.url   = this.options.url || answers.url;
+      this.options.templateUrl = answers.templateUrl;
+      this.options.template = answers.template;
+      this.options.templateType = answers.templateType;
       this.options.location    = this.options.location || answers.location;
-      this.options.controller = answers.location;
+      this.options.controller = answers.controller;
       done();
     }.bind(this));
   },
@@ -122,7 +121,8 @@ module.exports = generators.Base.extend({
     var stateOptions = [];
 
     if (this.options.abstract)    { stateOptions.push("    abstract: true")};
-    if (this.options.templateUrl) { stateOptions.push('    templateUrl: ' + this.options.templateUrl )};
+    if (this.options.templateUrl) { stateOptions.push("    templateUrl: '" + this.options.templateUrl + "'" )};
+    if (this.options.url) { stateOptions.push("    url: '" + this.options.url + "'")};
     if (this.options.templateType == 'Provider') { stateOptions.push('    templateProvider: function () {\n    } ' )};
     if (this.options.template)    { stateOptions.push('    template: ' + this.options.template )};
 
@@ -133,30 +133,32 @@ module.exports = generators.Base.extend({
         module: this.options.module,
         stateOptions: stateOptions.join(',\n'),
         stateName: this.options.location + '.' + _.kebabCase(this.options.name),
-        name: this.option.name
+        name: _.capitalize(this.options.controller)
       }
     );
-    this.fs.copyTpl(
-      this.templatePath('state-css.tmpl'),
-      this.destinationPath(this._getDestination(this.options.name, '.scss', this.options.location)),
-      {
-        name: _.kebabCase(this.options.name)
-      }
-    );
-    this.fs.copyTpl(
-      this.templatePath('state-html.tmpl'),
-      this.destinationPath(this._getDestination(this.options.name, '-view.html', this.options.location)),
-      {
-        name: _.kebabCase(this.options.name)
-      }
-    );
+    if (this.options.templateType != 'Provider' || this.options.templateType != 'None') {
+      this.fs.copyTpl(
+        this.templatePath('state-css.tmpl'),
+        this.destinationPath(this._getDestination(this.options.name, '.scss', this.options.location)),
+        {
+          name: _.kebabCase(this.options.name)
+        }
+      );
+      this.fs.copyTpl(
+        this.templatePath('state-html.tmpl'),
+        this.destinationPath(this._getDestination(this.options.name, '-view.ng.html', this.options.location)),
+        {
+          name: _.kebabCase(this.options.name)
+        }
+      );
+    }
   },
 
   _validateStateName: function (name) {
     return !!name.match(/^[A-Za-z0-9_]+$/g);
   },
   _validateNamespace: function (location) {
-    return !!location.match(/^[a-z_.]+$/g);
+    return !!location.match(/^[a-z_.]*$/g);
   },
   _validateRestrict: function (restrict) {
     return !!restrict.match(/^[AEC]{1,3}$/);
@@ -164,7 +166,9 @@ module.exports = generators.Base.extend({
   _getDestination: function (name, extension, location) {
     var destination = 'states';
     if(location) {
-      destination += '/' + location.split('.').join('/');
+      var paths = location.split('.');
+      paths.push(_.kebabCase(name));
+      destination += '/' + paths.join('/');
     }
     return destination + '/' + _.kebabCase(name) + extension;
   }
